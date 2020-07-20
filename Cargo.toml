@@ -8,10 +8,15 @@ edition = "2018"
 
 [dependencies]
 smol = { version = "0.1", features = ["tokio02"] }
-async-native-tls = "0.3.3"
-blocking = "0.4.6"
-anyhow = "1.0.31"
-futures = "0.3.5"
-async-io = "0.1.2"
-async-dup = "1.2.1"
-simple-irc = "0.3.2"
+async-native-tls = "0.3"
+blocking = "0.4"
+anyhow = "1.0"
+futures = "0.3"
+async-io = "0.1"
+async-dup = "1.2"
+simple-irc = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.8"
+log = "0.4"
+pretty_env_logger = "0.4"
+base64 = "0.12.3"

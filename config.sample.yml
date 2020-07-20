@@ -1,0 +1,18 @@
+user_data:
+  nickname: "AAA"
+  username: "AAAA"
+  realname: "AAAA"
+servers:
+  -
+    hostname: "irc.rizon.net"
+    port: 6697
+    password: ""
+    use_tls: true
+    sasl:
+      enabled: true
+      user: "AAAA"
+      password: "AAAAA"
+      terminate_failed: true
+    nickserv:
+      enabled: false
+      password: ""
