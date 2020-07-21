@@ -1,60 +1,72 @@
-use anyhow::{anyhow, Result};
-use futures::AsyncWrite;
+use futures::io::BufReader;
 use futures::prelude::*;
 use simple_irc::Message;
 
-use crate::config::{Server, UserData};
+use crate::config::Server;
 use crate::irc_state::IrcState;
+use crate::privmsg::{PrivMsgEvent, PrivMsgRequest};
 
 pub struct IrcHandler<'a> {
-    pub user_data: &'a UserData,
     pub server: &'a mut Server,
     pub irc_state: &'a mut IrcState,
+    pub privmsg_event: &'a Vec<Box<dyn PrivMsgEvent>>,
 }
 
 impl IrcHandler<'_> {
-    pub async fn handle(&mut self, message: &Message, writer: &mut (impl AsyncWrite + Unpin)) -> Result<()> {
-        log::debug!("{}", message);
+    pub async fn handle(&mut self, reader: impl AsyncRead + Unpin, writer: &mut (impl AsyncWrite + Unpin)) {
+        let mut lines_from_server = BufReader::new(reader).lines();
 
         if self.irc_state.initial_connection {
-            self.handle_initial_connection(writer).await?;
+            self.handle_initial_connection(writer).await;
         }
 
-        match message.command.as_str() {
-            "CAP" => self.handle_cap(message, writer).await?,
-            "AUTHENTICATE" => self.handle_authenticate(message, writer).await?,
-            "904" => self.handle_authenticate_fail(writer).await?,
-            "900" => (),
-            "903" => self.handle_authenticate_success(writer).await?,
-            "NOTICE" => (),
-            "001" => (),
-            "002" => (),
-            "003" => (),
-            "004" => (),
-            "005" => (),
-            "251" => (),
-            "252" => (),
-            "253" => (),
-            "254" => (),
-            "255" => (),
-            "265" => (),
-            "266" => (),
-            "375" => (),
-            "372" => (),
-            "MODE" => (),
-            "PRIVMSG" => (),
-            "PING" => {
-                self.write_message(&Message::new("PONG".to_string(), message.params.clone()), writer).await?;
-            }
-            _ => {
-                log::warn!("Unknown command. {}", message.command)
+        while let Some(line) = lines_from_server.next().await {
+            let message = &line.unwrap().parse::<simple_irc::Message>().unwrap();
+
+            log::debug!("{}", message);
+
+            match message.command.as_str() {
+                "CAP" => self.handle_cap(message, writer).await,
+                "AUTHENTICATE" => self.handle_authenticate(message, writer).await,
+                "904" => self.handle_authenticate_fail(writer).await,
+                "900" => (),
+                "903" => self.handle_authenticate_success(writer).await,
+                "NOTICE" => (),
+                "001" => (),
+                "002" => (),
+                "003" => (),
+                "004" => (),
+                "005" => (),
+                "251" => (),
+                "252" => (),
+                "253" => (),
+                "254" => (),
+                "255" => (),
+                "265" => (),
+                "266" => (),
+                "375" => (),
+                "372" => (),
+                "JOIN" => (),
+                "353" => (),
+                "366" => (),
+                "333" => (),
+                "332" => (),
+                "354" => (),
+                "315" => (),
+                "376" => self.handle_end_motd(message, writer).await,
+                "MODE" => self.handle_mode(message, writer).await,
+                "PRIVMSG" => self.handle_privmsg(message, writer).await,
+                "PING" => {
+                    self.write_message(&Message::new("PONG".to_string(), message.params.clone()), writer).await;
+                }
+                _ => {
+                    log::warn!("Unknown command. {}", message.command)
+                }
             }
         }
-
-        Ok(())
     }
 
-    async fn handle_initial_connection(&mut self, writer: &mut (impl AsyncWrite + Unpin)) -> Result<()> {
+    async fn handle_initial_connection(&mut self, writer: &mut (impl AsyncWrite + Unpin)) {
         // The recommended order of commands during registration is as follows:
         // CAP LS 302
         // PASS
@@ -66,35 +78,31 @@ impl IrcHandler<'_> {
         self.write_message(&Message::new("CAP".to_string(), vec![
             "LS".to_string(),
             "302".to_string(),
-        ]), writer).await?;
+        ]), writer).await;
 
         if !self.server.password.is_empty() {
             self.write_message(&Message::new("PASS".to_string(), vec![
                 self.server.password.clone(),
-            ]), writer).await?;
+            ]), writer).await;
         }
 
         self.write_message(&Message::new("NICK".to_string(), vec![
-            self.user_data.nickname.clone()
-        ]), writer).await?;
+            self.server.user_data.nickname.clone()
+        ]), writer).await;
 
         self.write_message(&Message::new("USER".to_string(), vec![
-            self.user_data.nickname.clone(),
+            self.server.user_data.nickname.clone(),
             "0".to_string(),
             "*".to_string(),
-            self.user_data.realname.clone()
-        ]), writer).await?;
+            self.server.user_data.realname.clone()
+        ]), writer).await;
 
         self.irc_state.initial_connection = false;
         self.irc_state.negotiating_cap = true;
-
-        Ok(())
     }
 
-    async fn handle_cap(&mut self, message: &Message, writer: &mut (impl AsyncWrite + Unpin)) -> Result<()> {
+    async fn handle_cap(&mut self, message: &Message, writer: &mut (impl AsyncWrite + Unpin)) {
         if self.irc_state.negotiating_cap {
-            log::debug!("{:?}", message.params);
-
             let cap_type = message.params[1].as_str();
 
             match cap_type {
@@ -114,7 +122,7 @@ impl IrcHandler<'_> {
                     self.write_message(&Message::new("CAP".to_string(), vec![
                         "REQ".to_string(),
                         self.irc_state.cap_negotiated.join(" "),
-                    ]), writer).await?;
+                    ]), writer).await;
                 }
                 "ACK" => {
                     let cap_accepted: Vec<&str> = message.params[2].split(" ").collect();
@@ -128,7 +136,7 @@ impl IrcHandler<'_> {
 
                         self.write_message(&Message::new("AUTHENTICATE".to_string(), vec![
                             "PLAIN".to_string(),
-                        ]), writer).await?;
+                        ]), writer).await;
                     }
 
                     if self.irc_state.cap_negotiated.len() == self.irc_state.cap_accepted.len() {
@@ -136,7 +144,7 @@ impl IrcHandler<'_> {
 
                         if !self.irc_state.negotiating_sasl {
                             // Finish CAP negotiation
-                            self.finish_cap(writer).await?;
+                            self.finish_cap(writer).await;
                         }
                     }
                 }
@@ -145,14 +153,10 @@ impl IrcHandler<'_> {
                 }
             }
         }
-
-        Ok(())
     }
 
-    async fn handle_authenticate(&mut self, message: &Message, writer: &mut (impl AsyncWrite + Unpin)) -> Result<()> {
+    async fn handle_authenticate(&mut self, message: &Message, writer: &mut (impl AsyncWrite + Unpin)) {
         if self.irc_state.negotiating_sasl {
-            log::debug!("{:?}", message.params);
-
             let authenticate_type = message.params[0].as_str();
 
             match authenticate_type {
@@ -161,18 +165,16 @@ impl IrcHandler<'_> {
 
                     self.write_message(&Message::new("AUTHENTICATE".to_string(), vec![
                         encoded,
-                    ]), writer).await?;
+                    ]), writer).await;
                 }
                 _ => {
                     log::warn!("Unknown AUTHENTICATE type: {}", authenticate_type);
                 }
             }
         }
-
-        Ok(())
     }
 
-    async fn handle_authenticate_fail(&mut self, writer: &mut (impl AsyncWrite + Unpin)) -> Result<()> {
+    async fn handle_authenticate_fail(&mut self, writer: &mut (impl AsyncWrite + Unpin)) {
         if self.irc_state.negotiating_sasl {
             log::error!("SASL Authentication failed");
 
@@ -181,44 +183,104 @@ impl IrcHandler<'_> {
             if self.server.sasl.terminate_failed {
                 self.write_message(&Message::new("QUIT".to_string(), vec![
                     "SASL Authentication failed".to_string(),
-                ]), writer).await?;
-
-                return Err(anyhow!("SASL Authentication failed"));
+                ]), writer).await;
             }
 
-            self.finish_cap(writer).await?;
+            self.finish_cap(writer).await;
         }
-
-        Ok(())
     }
 
-    async fn handle_authenticate_success(&mut self, writer: &mut (impl AsyncWrite + Unpin)) -> Result<()> {
+    async fn handle_authenticate_success(&mut self, writer: &mut (impl AsyncWrite + Unpin)) {
         if self.irc_state.negotiating_sasl {
             log::info!("SASL Authentication success");
 
             self.irc_state.negotiating_sasl = false;
 
-            self.finish_cap(writer).await?;
+            self.finish_cap(writer).await;
         }
-
-        Ok(())
     }
 
-    async fn finish_cap(&mut self, writer: &mut (impl AsyncWrite + Unpin)) -> Result<()> {
+    async fn finish_cap(&mut self, writer: &mut (impl AsyncWrite + Unpin)) {
         self.write_message(&Message::new("CAP".to_string(), vec![
             "END".to_string(),
-        ]), writer).await?;
-
-        Ok(())
+        ]), writer).await;
     }
 
-    async fn write_message(&self, message: &Message, writer: &mut (impl AsyncWrite + Unpin)) -> Result<()> {
+    async fn handle_privmsg(&mut self, message: &Message, writer: &mut (impl AsyncWrite + Unpin)) {
+        let mut source = &message.params[0];
+        let msg = &message.params[1];
+
+        if source.eq(&self.server.user_data.nickname) {
+            source = &message.prefix.as_ref().unwrap().nick;
+        }
+
+        let is_ctcp = msg.starts_with("\u{1}");
+
+        if is_ctcp {
+            let msg = msg.replace("\u{1}", "");
+            let command: &str = msg.split(" ").next().unwrap();
+
+            match command {
+                "VERSION" => {
+                    self.write_message(&Message::new("NOTICE".to_string(), vec![
+                        message.prefix.as_ref().unwrap().nick.clone(),
+                        format!("\u{1}VERSION {}\u{1}", self.server.ctcp.version),
+                    ]), writer).await;
+                }
+                "PING" => {
+                    self.write_message(&Message::new("NOTICE".to_string(), vec![
+                        message.prefix.as_ref().unwrap().nick.clone(),
+                        format!("\u{1}{}\u{1}", msg),
+                    ]), writer).await;
+                }
+                _ => log::warn!("Unknown CTCP message: {}", msg),
+            }
+        } else {
+            for event in self.privmsg_event {
+                if let Some(response) = event.execute(PrivMsgRequest {
+                    user: message.prefix.as_ref().unwrap(),
+                    source,
+                    message: msg,
+                }) {
+                    self.write_message(&Message::new("PRIVMSG".to_string(), vec![
+                        response.target.clone(),
+                        response.message.clone(),
+                    ]), writer).await;
+                }
+            }
+        }
+    }
+
+    async fn handle_end_motd(&mut self, _message: &Message, _writer: &mut (impl AsyncWrite + Unpin)) {}
+
+    async fn handle_mode(&mut self, message: &Message, writer: &mut (impl AsyncWrite + Unpin)) {
+        let _user = &message.params[0];
+        let mode_type = &message.params[1][..1];
+        let mode: &Vec<char> = &message.params[1][1..].chars().collect();
+
+        if mode_type == "+" && mode.contains(&'r') {
+            if self.server.use_hostserv {
+                self.write_message(&Message::new("PRIVMSG".to_string(), vec![
+                    "HostServ".to_string(),
+                    "ON".to_string(),
+                ]), writer).await;
+            }
+
+            // Nick is registered, join channels defined in server config
+            for channel in &self.server.channels {
+                self.write_message(&Message::new("JOIN".to_string(), vec![
+                    channel.name.clone(),
+                    channel.password.clone(),
+                ]), writer).await;
+            }
+        }
+    }
+
+    async fn write_message(&self, message: &Message, writer: &mut (impl AsyncWrite + Unpin)) {
         let message = message.to_string();
 
         log::debug!("{}", message);
 
-        writer.write_all((message + "\r\n").as_bytes()).await?;
-
-        return Ok(());
+        writer.write_all((message + "\r\n").as_bytes()).await.unwrap();
     }
 }

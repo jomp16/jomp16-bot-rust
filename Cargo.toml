@@ -20,3 +20,18 @@ serde_yaml = "0.8"
 log = "0.4"
 pretty_env_logger = "0.4"
 base64 = "0.12.3"
+# Add openssl-sys as a direct dependency so it can be cross compiled to
+# x86_64-unknown-linux-musl using the "vendored" feature below
+openssl-sys = "*"
+
+# GeoIP
+maxminddb = "0.14"
+dns-lookup = "1.0"
+
+[profile.release]
+lto = true
+
+[features]
+# Force openssl-sys to staticly link in the openssl library. Necessary when
+# cross compiling to x86_64-unknown-linux-musl.
+vendored = ["openssl-sys/vendored"]

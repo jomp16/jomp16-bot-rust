@@ -1,13 +1,13 @@
-user_data:
-  nickname: "AAA"
-  username: "AAAA"
-  realname: "AAAA"
 servers:
-  -
+  - user_data:
+      nickname: "AAA"
+      username: "AAAA"
+      realname: "AAAA"
     hostname: "irc.rizon.net"
     port: 6697
     password: ""
     use_tls: true
+    use_hostserv: false
     sasl:
       enabled: true
       user: "AAAA"
@@ -16,3 +16,10 @@ servers:
     nickserv:
       enabled: false
       password: ""
+    ctcp:
+      version: "jomp16-bot 0.0.1"
+    channels:
+      - name: "#AAAAA"
+        password: ""
+    privmsg_plugins:
+      - "geoip"
