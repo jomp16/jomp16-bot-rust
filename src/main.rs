@@ -10,15 +10,16 @@ use async_io::Async;
 use smol::Task;
 
 use crate::config::IrcConfig;
+use crate::ctcp::{ClientInfoCtcpResponse, CtcpEvent, FingerCtcpResponse, PingCtcpResponse, SourceCtcpResponse, TimeCtcpResponse, UserInfoCtcpResponse, VersionCtcpResponse};
 use crate::irc_handler::IrcHandler;
 use crate::irc_state::IrcState;
 use crate::privmsg::{GeoIpPrivMsgEvent, PrivMsgEvent};
 
+mod ctcp;
+mod irc_ext;
 mod geoip_response;
-
 mod privmsg;
 mod irc_handler;
-
 mod irc_state;
 mod config;
 
@@ -50,19 +51,34 @@ fn main() -> Result<()> {
                             irc_state.cap_requested.push("sasl".to_string());
                         }
 
-                        let mut plugins: Vec<Box<dyn PrivMsgEvent>> = vec![];
+                        let mut privmsg_plugins: Vec<Box<dyn PrivMsgEvent>> = vec![];
+                        let mut ctcp_plugins: Vec<Box<dyn CtcpEvent>> = vec![];
 
                         for plugin in &server.privmsg_plugins {
                             match plugin.as_str() {
-                                "geoip" => plugins.push(Box::new(GeoIpPrivMsgEvent { ..Default::default() })),
+                                "geoip" => privmsg_plugins.push(Box::new(GeoIpPrivMsgEvent { ..Default::default() })),
                                 _ => log::warn!("Unknown plugin: {}", plugin),
+                            }
+                        }
+
+                        for plugin in &server.ctcp.enabled {
+                            match plugin.as_str() {
+                                "CLIENTINFO" => ctcp_plugins.push(Box::new(ClientInfoCtcpResponse { available_ctcp: server.ctcp.enabled.clone() })),
+                                "FINGER" => ctcp_plugins.push(Box::new(FingerCtcpResponse {})),
+                                "PING" => ctcp_plugins.push(Box::new(PingCtcpResponse {})),
+                                "SOURCE" => ctcp_plugins.push(Box::new(SourceCtcpResponse {})),
+                                "TIME" => ctcp_plugins.push(Box::new(TimeCtcpResponse {})),
+                                "VERSION" => ctcp_plugins.push(Box::new(VersionCtcpResponse {})),
+                                "USERINFO" => ctcp_plugins.push(Box::new(UserInfoCtcpResponse {})),
+                                _ => log::warn!("Unknown CTCP plugin: {}", plugin),
                             }
                         }
 
                         let mut handler = IrcHandler {
                             server: &mut server.clone(),
                             irc_state,
-                            privmsg_event: &plugins,
+                            ctcp_event: &ctcp_plugins,
+                            privmsg_event: &privmsg_plugins,
                         };
 
                         if server.use_tls {
@@ -86,9 +102,7 @@ fn main() -> Result<()> {
     }
 
     smol::run(async {
-        for future in futures {
-            future.await;
-        }
+        futures::future::join_all(futures).await;
 
         Ok(())
     })

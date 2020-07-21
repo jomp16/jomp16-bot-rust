@@ -3,12 +3,15 @@ use futures::prelude::*;
 use simple_irc::Message;
 
 use crate::config::Server;
+use crate::ctcp::{CtcpEvent, CtcpRequest};
+use crate::irc_ext::IrcExt;
 use crate::irc_state::IrcState;
 use crate::privmsg::{PrivMsgEvent, PrivMsgRequest};
 
 pub struct IrcHandler<'a> {
     pub server: &'a mut Server,
     pub irc_state: &'a mut IrcState,
+    pub ctcp_event: &'a Vec<Box<dyn CtcpEvent>>,
     pub privmsg_event: &'a Vec<Box<dyn PrivMsgEvent>>,
 }
 
@@ -56,9 +59,7 @@ impl IrcHandler<'_> {
                 "376" => self.handle_end_motd(message, writer).await,
                 "MODE" => self.handle_mode(message, writer).await,
                 "PRIVMSG" => self.handle_privmsg(message, writer).await,
-                "PING" => {
-                    self.write_message(&Message::new("PONG".to_string(), message.params.clone()), writer).await;
-                }
+                "PING" => self.handle_ping(message, writer).await,
                 _ => {
                     log::warn!("Unknown command. {}", message.command)
                 }
@@ -210,42 +211,39 @@ impl IrcHandler<'_> {
         let mut source = &message.params[0];
         let msg = &message.params[1];
 
-        if source.eq(&self.server.user_data.nickname) {
+        if !source.is_channel_name() {
             source = &message.prefix.as_ref().unwrap().nick;
         }
 
-        let is_ctcp = msg.starts_with("\u{1}");
-
-        if is_ctcp {
+        if msg.is_ctcp() {
             let msg = msg.replace("\u{1}", "");
             let command: &str = msg.split(" ").next().unwrap();
+            let msg = msg[command.len()..].trim();
 
-            match command {
-                "VERSION" => {
-                    self.write_message(&Message::new("NOTICE".to_string(), vec![
-                        message.prefix.as_ref().unwrap().nick.clone(),
-                        format!("\u{1}VERSION {}\u{1}", self.server.ctcp.version),
-                    ]), writer).await;
+            for event in self.ctcp_event {
+                if let Some(response) = event.execute(CtcpRequest {
+                    server: self.server,
+                    irc_state: self.irc_state,
+                    user: message.prefix.as_ref().unwrap(),
+                    source,
+                    command: &command.to_string(),
+                    message: &msg.to_string(),
+                }) {
+                    self.send_notice(response.target, format!("\u{1}{}\u{1}", response.message), writer).await;
+
+                    break;
                 }
-                "PING" => {
-                    self.write_message(&Message::new("NOTICE".to_string(), vec![
-                        message.prefix.as_ref().unwrap().nick.clone(),
-                        format!("\u{1}{}\u{1}", msg),
-                    ]), writer).await;
-                }
-                _ => log::warn!("Unknown CTCP message: {}", msg),
             }
         } else {
             for event in self.privmsg_event {
                 if let Some(response) = event.execute(PrivMsgRequest {
+                    server: self.server,
+                    irc_state: self.irc_state,
                     user: message.prefix.as_ref().unwrap(),
                     source,
                     message: msg,
                 }) {
-                    self.write_message(&Message::new("PRIVMSG".to_string(), vec![
-                        response.target.clone(),
-                        response.message.clone(),
-                    ]), writer).await;
+                    self.send_privmsg(response.target, response.message, writer).await;
                 }
             }
         }
@@ -260,10 +258,7 @@ impl IrcHandler<'_> {
 
         if mode_type == "+" && mode.contains(&'r') {
             if self.server.use_hostserv {
-                self.write_message(&Message::new("PRIVMSG".to_string(), vec![
-                    "HostServ".to_string(),
-                    "ON".to_string(),
-                ]), writer).await;
+                self.send_privmsg("HostServ".to_string(), "ON".to_string(), writer).await;
             }
 
             // Nick is registered, join channels defined in server config
@@ -274,6 +269,24 @@ impl IrcHandler<'_> {
                 ]), writer).await;
             }
         }
+    }
+
+    async fn handle_ping(&mut self, message: &Message, writer: &mut (impl AsyncWrite + Unpin)) {
+        self.write_message(&Message::new("PONG".to_string(), message.params.clone()), writer).await;
+    }
+
+    async fn send_privmsg(&self, target: String, message: String, writer: &mut (impl AsyncWrite + Unpin)) {
+        self.write_message(&Message::new("PRIVMSG".to_string(), vec![
+            target,
+            message,
+        ]), writer).await;
+    }
+
+    async fn send_notice(&self, target: String, message: String, writer: &mut (impl AsyncWrite + Unpin)) {
+        self.write_message(&Message::new("NOTICE".to_string(), vec![
+            target,
+            message,
+        ]), writer).await;
     }
 
     async fn write_message(&self, message: &Message, writer: &mut (impl AsyncWrite + Unpin)) {

@@ -2,8 +2,12 @@ use simple_irc::Prefix;
 
 use crate::geoip_response;
 use maxminddb::Reader;
+use crate::irc_state::IrcState;
+use crate::config::Server;
 
 pub struct PrivMsgRequest<'a> {
+    pub server: &'a Server,
+    pub irc_state: &'a IrcState,
     pub user: &'a Prefix,
     pub source: &'a String,
     pub message: &'a String,

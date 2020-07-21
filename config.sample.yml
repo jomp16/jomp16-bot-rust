@@ -17,7 +17,16 @@ servers:
       enabled: false
       password: ""
     ctcp:
+      enabled:
+        - "CLIENTINFO"
+        - "FINGER"
+        - "PING"
+        - "SOURCE"
+        - "TIME"
+        - "VERSION"
+        - "USERINFO"
       version: "jomp16-bot 0.0.1"
+      source: "https://git.rwx.ovh/jomp16/jomp16-bot-rust"
     channels:
       - name: "#AAAAA"
         password: ""

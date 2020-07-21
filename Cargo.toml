@@ -27,6 +27,7 @@ openssl-sys = "*"
 # GeoIP
 maxminddb = "0.14"
 dns-lookup = "1.0"
+chrono = "0.4"
 
 [profile.release]
 lto = true

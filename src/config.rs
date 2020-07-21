@@ -44,7 +44,9 @@ pub struct NickServConfig {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CtcpConfig {
+    pub enabled: Vec<String>,
     pub version: String,
+    pub source: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
