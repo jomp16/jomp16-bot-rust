@@ -1,9 +1,9 @@
+use maxminddb::Reader;
 use simple_irc::Prefix;
 
-use crate::geoip_response;
-use maxminddb::Reader;
-use crate::irc_state::IrcState;
 use crate::config::Server;
+use crate::geoip_response;
+use crate::irc_state::IrcState;
 
 pub struct PrivMsgRequest<'a> {
     pub server: &'a Server,
@@ -27,11 +27,13 @@ pub struct GeoIpPrivMsgEvent {
     pub reader_city: Reader<Vec<u8>>,
 }
 
+pub struct Iai55Chan {}
+
 impl Default for GeoIpPrivMsgEvent {
     fn default() -> Self {
         GeoIpPrivMsgEvent {
             reader_asn: maxminddb::Reader::open_readfile("GeoLite2-ASN.mmdb").unwrap(),
-            reader_city: maxminddb::Reader::open_readfile("GeoLite2-City.mmdb").unwrap()
+            reader_city: maxminddb::Reader::open_readfile("GeoLite2-City.mmdb").unwrap(),
         }
     }
 }
@@ -68,6 +70,19 @@ impl PrivMsgEvent for GeoIpPrivMsgEvent {
             return Some(PrivMsgResponse {
                 target: request.source.clone(),
                 message,
+            });
+        }
+
+        None
+    }
+}
+
+impl PrivMsgEvent for Iai55Chan {
+    fn execute(&self, request: PrivMsgRequest) -> Option<PrivMsgResponse> {
+        if request.message.eq("IAI") {
+            return Some(PrivMsgResponse {
+                target: request.source.clone(),
+                message: "DA HORA?!".to_string(),
             });
         }
 

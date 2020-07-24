@@ -32,3 +32,4 @@ servers:
         password: ""
     privmsg_plugins:
       - "geoip"
+      - "iai_55chan"

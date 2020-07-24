@@ -424,6 +424,7 @@ dependencies = [
  "maxminddb",
  "openssl-sys",
  "pretty_env_logger",
+ "regex",
  "serde",
  "serde_yaml",
  "simple-irc",
