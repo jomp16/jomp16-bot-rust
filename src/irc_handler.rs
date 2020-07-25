@@ -24,45 +24,50 @@ impl IrcHandler<'_> {
         }
 
         while let Some(line) = lines_from_server.next().await {
-            let message = &line.unwrap().parse::<simple_irc::Message>().unwrap();
+            match line {
+                Ok(line) => {
+                    let message = &line.parse::<simple_irc::Message>().unwrap();
 
-            log::debug!("{}", message);
+                    log::debug!("{}", message);
 
-            match message.command.as_str() {
-                "CAP" => self.handle_cap(message, writer).await,
-                "AUTHENTICATE" => self.handle_authenticate(message, writer).await,
-                "904" => self.handle_authenticate_fail(writer).await,
-                "900" => (),
-                "903" => self.handle_authenticate_success(writer).await,
-                "NOTICE" => (),
-                "001" => (),
-                "002" => (),
-                "003" => (),
-                "004" => (),
-                "005" => (),
-                "251" => (),
-                "252" => (),
-                "253" => (),
-                "254" => (),
-                "255" => (),
-                "265" => (),
-                "266" => (),
-                "375" => (),
-                "372" => (),
-                "JOIN" => (),
-                "353" => (),
-                "366" => (),
-                "333" => (),
-                "332" => (),
-                "354" => (),
-                "315" => (),
-                "376" => self.handle_end_motd(message, writer).await,
-                "MODE" => self.handle_mode(message, writer).await,
-                "PRIVMSG" => self.handle_privmsg(message, writer).await,
-                "PING" => self.handle_ping(message, writer).await,
-                _ => {
-                    log::warn!("Unknown command. {}", message.command)
-                }
+                    match message.command.as_str() {
+                        "CAP" => self.handle_cap(message, writer).await,
+                        "AUTHENTICATE" => self.handle_authenticate(message, writer).await,
+                        "904" => self.handle_authenticate_fail(writer).await,
+                        "900" => (),
+                        "903" => self.handle_authenticate_success(writer).await,
+                        "NOTICE" => (),
+                        "001" => (),
+                        "002" => (),
+                        "003" => (),
+                        "004" => (),
+                        "005" => (),
+                        "251" => (),
+                        "252" => (),
+                        "253" => (),
+                        "254" => (),
+                        "255" => (),
+                        "265" => (),
+                        "266" => (),
+                        "375" => (),
+                        "372" => (),
+                        "JOIN" => (),
+                        "353" => (),
+                        "366" => (),
+                        "333" => (),
+                        "332" => (),
+                        "354" => (),
+                        "315" => (),
+                        "376" => self.handle_end_motd(message, writer).await,
+                        "MODE" => self.handle_mode(message, writer).await,
+                        "PRIVMSG" => self.handle_privmsg(message, writer).await,
+                        "PING" => self.handle_ping(message, writer).await,
+                        _ => {
+                            log::warn!("Unknown command. {}", message.command)
+                        }
+                    }
+                },
+                Err(e) => log::error!("{}", e),
             }
         }
     }
