@@ -17,58 +17,59 @@ pub struct IrcHandler<'a> {
 
 impl IrcHandler<'_> {
     pub async fn handle(&mut self, reader: impl AsyncRead + Unpin, writer: &mut (impl AsyncWrite + Unpin)) {
-        let mut lines_from_server = BufReader::new(reader).lines();
+        let mut buf_reader = BufReader::new(reader);
+        let mut buf = vec![];
 
         if self.irc_state.initial_connection {
             self.handle_initial_connection(writer).await;
         }
 
-        while let Some(line) = lines_from_server.next().await {
-            match line {
-                Ok(line) => {
-                    let message = &line.parse::<simple_irc::Message>().unwrap();
+        while let Ok(_) = buf_reader.read_until(b'\n', &mut buf).await {
+            let line = String::from_utf8_lossy(&buf);
+            let line = line.trim();
 
-                    log::debug!("{}", message);
+            let message = &line.parse::<simple_irc::Message>().unwrap();
 
-                    match message.command.as_str() {
-                        "CAP" => self.handle_cap(message, writer).await,
-                        "AUTHENTICATE" => self.handle_authenticate(message, writer).await,
-                        "904" => self.handle_authenticate_fail(writer).await,
-                        "900" => (),
-                        "903" => self.handle_authenticate_success(writer).await,
-                        "NOTICE" => (),
-                        "001" => (),
-                        "002" => (),
-                        "003" => (),
-                        "004" => (),
-                        "005" => (),
-                        "251" => (),
-                        "252" => (),
-                        "253" => (),
-                        "254" => (),
-                        "255" => (),
-                        "265" => (),
-                        "266" => (),
-                        "375" => (),
-                        "372" => (),
-                        "JOIN" => (),
-                        "353" => (),
-                        "366" => (),
-                        "333" => (),
-                        "332" => (),
-                        "354" => (),
-                        "315" => (),
-                        "376" => self.handle_end_motd(message, writer).await,
-                        "MODE" => self.handle_mode(message, writer).await,
-                        "PRIVMSG" => self.handle_privmsg(message, writer).await,
-                        "PING" => self.handle_ping(message, writer).await,
-                        _ => {
-                            log::warn!("Unknown command. {}", message.command)
-                        }
-                    }
-                },
-                Err(e) => log::error!("{}", e),
+            log::debug!("{}", message);
+
+            match message.command.as_str() {
+                "CAP" => self.handle_cap(message, writer).await,
+                "AUTHENTICATE" => self.handle_authenticate(message, writer).await,
+                "904" => self.handle_authenticate_fail(writer).await,
+                "900" => (),
+                "903" => self.handle_authenticate_success(writer).await,
+                "NOTICE" => (),
+                "001" => (),
+                "002" => (),
+                "003" => (),
+                "004" => (),
+                "005" => (),
+                "251" => (),
+                "252" => (),
+                "253" => (),
+                "254" => (),
+                "255" => (),
+                "265" => (),
+                "266" => (),
+                "375" => (),
+                "372" => (),
+                "JOIN" => (),
+                "353" => (),
+                "366" => (),
+                "333" => (),
+                "332" => (),
+                "354" => (),
+                "315" => (),
+                "376" => self.handle_end_motd(message, writer).await,
+                "MODE" => self.handle_mode(message, writer).await,
+                "PRIVMSG" => self.handle_privmsg(message, writer).await,
+                "PING" => self.handle_ping(message, writer).await,
+                _ => {
+                    log::warn!("Unknown command. {}", message.command)
+                }
             }
+
+            buf.clear();
         }
     }
 
