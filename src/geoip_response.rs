@@ -48,7 +48,14 @@ pub fn ip_to_geoip(ips: Vec<&str>, reader_asn: &maxminddb::Reader<Vec<u8>>, read
         if ip.to_string().ne(ip_addr) {
             log::info!("Resolved DNS {} to IP {}", ip_addr, ip.to_string())
         }
-        let ptr_dns = dns_lookup::lookup_addr(&ip).unwrap().to_string();
+        let ptr_dns = match dns_lookup::lookup_addr(&ip) {
+            Ok(ptr) => ptr,
+            Err(e) => {
+                log::error!("Couldn't resolve PTR of IP {}. Error: {}", &ip, e);
+
+                ip.to_string()
+            }
+        };
         let ptr = if ptr_dns.eq(&ip.to_string()) { "No PTR".to_string() } else { ptr_dns };
         let asn_option: Result<maxminddb::geoip2::Asn, maxminddb::MaxMindDBError> = reader_asn.lookup(ip);
         let city_option: Result<maxminddb::geoip2::City, maxminddb::MaxMindDBError> = reader_city.lookup(ip);
@@ -92,8 +99,8 @@ pub fn ip_to_geoip(ips: Vec<&str>, reader_asn: &maxminddb::Reader<Vec<u8>>, read
 
         match asn_option {
             Ok(asn) => {
-                asn_number = format!("AS{}", asn.autonomous_system_number.unwrap().to_string());
-                asn_name = asn.autonomous_system_organization.unwrap().to_string();
+                asn_number = format!("AS{}", asn.autonomous_system_number.unwrap_or(0).to_string());
+                asn_name = asn.autonomous_system_organization.unwrap_or("No ASN name").to_string();
             }
             Err(err) => log::error!("An error happened while searching ASN for IP: {}, {}", ip, err),
         }
