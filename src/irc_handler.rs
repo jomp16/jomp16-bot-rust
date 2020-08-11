@@ -247,7 +247,7 @@ impl IrcHandler<'_> {
                     irc_state: self.irc_state,
                     user: message.prefix.as_ref().unwrap(),
                     source,
-                    message: msg,
+                    message: &msg.remove_colorization().to_string(),
                 }) {
                     self.send_privmsg(response.target, response.message, writer).await;
                 }

@@ -41,7 +41,15 @@ impl Default for GeoIpPrivMsgEvent {
 impl PrivMsgEvent for GeoIpPrivMsgEvent {
     fn execute(&self, request: PrivMsgRequest) -> Option<PrivMsgResponse> {
         if request.message.starts_with(".geoip") {
-            let ip_request = &request.message[7..];
+            let ip_request = request.message[6..].trim();
+
+            if ip_request.len() == 0 {
+                return Some(PrivMsgResponse {
+                    target: request.source.clone(),
+                    message: "No IP specified".to_string(),
+                });
+            }
+
             let mut message: String = "".to_string();
 
             match geoip_response::ip_to_geoip(vec![ip_request], &self.reader_asn, &self.reader_city) {
