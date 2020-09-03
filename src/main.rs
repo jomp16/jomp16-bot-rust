@@ -2,12 +2,12 @@ extern crate pretty_env_logger;
 
 use std::env;
 use std::fs::File;
-use std::net::{TcpStream, ToSocketAddrs};
+use std::net::ToSocketAddrs;
 
 use anyhow::{anyhow, Result};
 use async_dup::Mutex;
-use async_io::Async;
-use smol::Task;
+use async_std::net::TcpStream;
+use async_std::task;
 
 use crate::config::IrcConfig;
 use crate::ctcp::{ClientInfoCtcpResponse, CtcpEvent, FingerCtcpResponse, PingCtcpResponse, SourceCtcpResponse, TimeCtcpResponse, UserInfoCtcpResponse, VersionCtcpResponse};
@@ -24,7 +24,7 @@ mod irc_state;
 mod config;
 
 fn main() -> Result<()> {
-    smol::run(async {
+    task::block_on(async {
         if env::var_os("RUST_LOG").is_none() {
             env::set_var("RUST_LOG", "jomp16_bot_own=debug");
         }
@@ -40,9 +40,9 @@ fn main() -> Result<()> {
         let mut futures = vec![];
 
         for server in config.servers {
-            futures.push(Task::spawn(async move {
+            futures.push(task::spawn(async move {
                 for socket_addr in format!("{}:{}", &server.hostname, server.port).to_socket_addrs().unwrap() {
-                    let stream_result = Async::<TcpStream>::connect(socket_addr).await;
+                    let stream_result = TcpStream::connect(socket_addr).await;
 
                     match stream_result {
                         Ok(stream) => {
